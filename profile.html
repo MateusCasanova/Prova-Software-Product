@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Perfil do Usuário</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        #totalInBRL {
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+
+        #totalInUSD {
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #bitcoinInfo {
+            text-align: left;
+            width: 100%;
+            font-size: 2.5em;
+            margin-top: 20px;
+            color: #FFD700;
+        }
+
+        #backToMiningBtn {
+            margin-top: 45px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header_profile">
+        <button id="logo" class="logo">Minercon ₿</button>
+    </div>
+    <div class="center-box-profile">
+        <div class="profile-header">
+            <span>Conta 1</span>
+        </div>
+        <div id="userInfo">
+            <div id="userId"></div>
+            <div id="totalInBRL"></div>
+            <div id="totalInUSD"></div>
+            <div id="lastConversionTime" style="font-size: 1em; color: #FFFFFF; margin-bottom: 20px;"></div>
+        </div>
+        <div class="button-container">
+            <button id="sendBtn">Sacar</button>
+            <button id="swapBtn">Enviar BTC</button>
+        </div>
+        <div id="bitcoinInfo">
+            ₿ <span id="btcAmount"></span>
+        </div>
+        <button id="backToMiningBtn">Voltar para Mineração</button>
+    </div>
+    <div id="withdrawSection" class="hidden">
+        <div class="withdraw-container">
+            <input type="number" id="withdrawAmount" placeholder="Quantidade de BTC para sacar"
+                style="font-size: 1.5em; margin-bottom: 20px;">
+            <div id="withdrawValueInBRL" style="font-size: 1.5em; margin-bottom: 20px;"></div>
+            <button id="confirmWithdrawBtn">Sacar</button>
+            <button id="cancelWithdrawBtn">Voltar</button>
+        </div>
+    </div>
+    
+
+
+    <script>
+        const userId = localStorage.getItem('userId');
+
+        document.getElementById('backToMiningBtn').addEventListener('click', function () {
+            window.location.href = 'mining.html';
+        });
+
+        function fetchAndUpdateUserInfo() {
+            fetch(`https://mineradoraapi-fda524168c07.herokuapp.com/user_info?user_id=${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('userInfo').textContent = 'Erro ao obter informações do usuário.';
+                        console.error(data.error);
+                    } else {
+                        document.getElementById('userId').textContent = `Usuário: ${data.user_id}`;
+                        document.getElementById('btcAmount').textContent = data.total_mined.toFixed(5);
+                        updateBRLValue(data.total_mined);
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('userInfo').textContent = 'Falha ao conectar ao servidor.';
+                    console.error('Erro ao obter informações do usuário: ', error);
+                });
+        }
+
+        function updateBRLValue(btcAmount) {
+            fetch('https://mineradoraapi-fda524168c07.herokuapp.com/get_btc_values')
+                .then(response => response.json())
+                .then(btcValues => {
+                    if (btcValues) {
+                        const btcToBRL = btcValues.BTC_BRL;
+                        const btcToUSD = btcValues.BTC_USD;
+                        const convertedValueBRL = btcAmount * btcToBRL;
+                        const convertedValueUSD = btcAmount * btcToUSD;
+                        document.getElementById('totalInBRL').textContent = `R$ ${convertedValueBRL.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                        document.getElementById('totalInUSD').textContent = `$ ${convertedValueUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+                        const now = new Date();
+                        document.getElementById('lastConversionTime').textContent = 'Última conversão: ' + now.toLocaleString('pt-BR');
+                    }
+                })
+                .catch(error => {
+                    console.error('Failed to fetch BTC values:', error);
+                });
+        }
+
+
+
+        window.onload = function () {
+            fetchAndUpdateUserInfo();
+            setInterval(() => {
+                fetchAndUpdateUserInfo();
+            }, 30000);
+        };
+        document.getElementById('sendBtn').addEventListener('click', function () {
+            document.querySelector('.center-box-profile').classList.add('hidden');
+            document.getElementById('withdrawSection').classList.remove('hidden');
+        });
+
+        document.getElementById('confirmWithdrawBtn').addEventListener('click', function () {
+            const withdrawAmount = parseFloat(document.getElementById('withdrawAmount').value || 0);
+            const totalMined = parseFloat(localStorage.getItem('btcTotal') || document.getElementById('btcAmount').textContent);
+            if (withdrawAmount > totalMined || isNaN(withdrawAmount)) {
+                alert("Erro: Você não possui BTC suficiente ou valor inválido.");
+                return;
+            }
+            const newTotal = totalMined - withdrawAmount;
+            localStorage.setItem('btcTotal', newTotal.toFixed(5));
+            document.getElementById('btcAmount').textContent = newTotal.toFixed(5);
+            updateBRLValue(newTotal);
+            document.querySelector('.center-box-profile').classList.remove('hidden');
+            document.getElementById('withdrawSection').classList.add('hidden');
+        });
+
+        window.onload = function () {
+            fetchAndUpdateUserInfo();
+            setInterval(() => {
+                fetchAndUpdateUserInfo();
+            }, 10000);
+
+
+            const storedBtcTotal = localStorage.getItem('btcTotal');
+            if (storedBtcTotal) {
+                document.getElementById('btcAmount').textContent = storedBtcTotal;
+            }
+        };
+
+        document.getElementById('cancelWithdrawBtn').addEventListener('click', function () {
+            document.querySelector('.center-box-profile').classList.remove('hidden');
+            document.getElementById('withdrawSection').classList.add('hidden');
+        });
+
+        document.getElementById('withdrawAmount').addEventListener('input', function () {
+            const amount = parseFloat(this.value || 0);
+            fetch('https://mineradoraapi-fda524168c07.herokuapp.com/get_btc_values')
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.BTC_BRL) {
+                        const valueInBRL = amount * data.BTC_BRL;
+                        document.getElementById('withdrawValueInBRL').textContent = `Valor em BRL: R$ ${valueInBRL.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Failed to fetch BTC values:', error);
+                });
+        });
+
+
+    </script>
+
+</body>
+
+</html>
